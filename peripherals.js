@@ -22,18 +22,41 @@ SOFTWARE.
 
 */
 
+
+function exposeAPI(target, props) {
+  if (!target.exposed) {
+    target.exposed = {}
+  }
+  if (target.expose) {
+    for (const methodName of target.expose) {
+      let value = target[methodName];
+      if (typeof value === 'function') {
+        value = value.bind(target);
+      }
+      target.exposed[methodName] = value;
+    }
+  }
+}
+
+
 export class PeripheralStore {
+  expose = ['get', 'getIds', 'getType', 'pullEvent'];
   constructor() {
     this.nextId = 0;
     this.byId = new Map();
     this.byType = new Map();
-    this.getType = this.byType.keys;
-    this.getIds = this.byId.keys;
     this.requestQueue = [];
     this.eventQueue = [];
+    exposeAPI(this);
   }
   get(typeName) {
-    return this.byId.get(this.byName.get(typeName));
+    return this.byId.get(this.byType.get(typeName));
+  }
+  getIds() {
+    return [...this.byId.keys()];
+  }
+  getType(peripheralId) {
+    return this.byId.get(peripheralId).typeName;
   }
   pullEvent (passive) {
     const event = this.eventQueue.shift();
@@ -57,18 +80,19 @@ export class PeripheralStore {
     }
   }
   mount (peripheral) {
+    exposeAPI(peripheral);
     const peripheralId = this.nextId;
     this.nextId += 1;
     peripheral.dispatch = this.pushEvent.bind(this, peripheralId);
     peripheral.start();
-    this.byId.set(peripheralId, peripheral);
+    this.byId.set(peripheralId, peripheral.exposed);
     this.byType.set(peripheral.typeName, peripheralId);
     this.pushEvent(peripheralId, 'mount');
   }
   unmount (peripheralId) {
-    const peripheral = this.byId.get(peripheralId);
+    const peripheral = this.peripherals.get(peripheralId);
     if (peripheral) {
-      this.byId.delete(peripheralId);
+      this.peripherals.delete(peripheralId);
       this.byName.delete(peripheral.typeName);      
       peripheral.stop();
       peripheral.dispatch = () => {};
@@ -277,11 +301,12 @@ class IndexedImage extends ImageData {
   }
 }
 
-const crossCursor = '00070000' + '00272000' + '02000200' + '77000770' +
-                    '02000200' + '00272000' + '00070000' + '00000000'
+const crossCursor = "00070000" + "00272000" + "02000200" + "77000770" +
+                    "02000200" + "00272000" + "00070000" + "00000000"
 
 
 class Cursor extends IndexedImage {
+  exposed = ['paste', 'draw', 'clear'];
   #offsetX;
   #offsetY;
   #offsetWidth;
@@ -293,6 +318,7 @@ class Cursor extends IndexedImage {
     this.offsetX = 3;
     this.offsetY = 3;
     this.context = context;
+    exposeAPI(this);
   }
   get offsetX() {
     return this.#offsetX;
@@ -324,6 +350,7 @@ class Cursor extends IndexedImage {
 
 export class Display extends IndexedImage {
   typeName = 'display';
+  expose = ['typeName', 'clear', 'cursor', 'point', 'rectangle'];
   constructor(screen, palette) {
     super(screen.width, screen.height, palette);
     screen.resizeHandler();
@@ -331,6 +358,7 @@ export class Display extends IndexedImage {
     this.screen.screenElement.style.backgroundColor = this.palette.getHex(0);
     this.context = screen.createCanvasContext();
     this.cursor = new Cursor(screen.createCanvasContext(), this.palette);
+    exposeAPI(this);
   }
   refresh(timestamp) {
     if (this.dirty) {
@@ -368,7 +396,7 @@ export class ScreenMouse {
     if (this.y >= this.screen.height) {
       this.y = this.screen.height - 1;
     }
-    this.dispatch('mousemove', {x: this.x, y: this.y});
+    this.dispatch("mousemove", {x: this.x, y: this.y});
   }  
   start() {
     this.screen.screenElement.addEventListener(

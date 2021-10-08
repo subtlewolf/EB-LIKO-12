@@ -43,25 +43,26 @@ const defaultColors = [
   '#f4be8b', // 15 Tan
 ];
 
-window.peripherals = new PeripheralStore();
+const peripheralStore = new PeripheralStore();
+window.peripherals = peripheralStore.exposed;
 const palette = new Palette(defaultColors);
 const screen = new Screen(document.getElementById('screen'));
-window.display = new Display(screen, palette);
-peripherals.mount(display);
-display.clear(6);
+const display = new Display(screen, palette);
+peripheralStore.mount(display);
+peripheralStore.mount(new ScreenMouse(screen));
 
 async function updateCursor(peripherals) {
+  const cursor = peripherals.get('display').cursor;
   while (true) {
     const event = await peripherals.pullEvent();
     if (event.name === 'mousemove') {
-      display.cursor.draw(event.data.x, event.data.y);
+      cursor.draw(event.data.x, event.data.y);
     }
   }
 }
 
+display.clear(6);
 updateCursor(peripherals);
-peripherals.mount(new ScreenMouse(screen));
-
 for (let i=0;i<8;i++) {
   for (let j=0;j<12;j++) {
     if ((i + j) % 2) {
