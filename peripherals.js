@@ -197,8 +197,8 @@ export class IndexedImage extends ImageData {
     this.palette = palette;
     this.rosetta = new Uint32Array(this.data.buffer);
     if (arrayLike && arrayLike.length === width * height) {
-        this.indexed = Uint8ClampedArray.from(arrayLike);
-        this.blit(this);
+      this.indexed = Uint8ClampedArray.from(arrayLike);
+      this.blit(this);
     } else {
       this.indexed = new Uint8ClampedArray(width * height);
       this.data.fill(palette.transparent)
@@ -264,10 +264,10 @@ export class IndexedImage extends ImageData {
     const rosetta = this.rosetta;
     const indexed = this.indexed;
     if (width == null) {
-      width = targetWidth - left;
+      width = Math.min(targetWidth - left, source.width);
     }
     if (height == null) {
-      height = targetHeight - top;
+      height = Math.min(targetHeight - top, source.height);
     }
     const right = targetWidth - left - width + 1;
     const bottom = targetHeight - top - height + 1;
