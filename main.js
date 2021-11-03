@@ -70,3 +70,13 @@ for (let i=0;i<8;i++) {
     }
   }
 }
+
+const shape = display.image(8, 8, "00000000" + "07000000" +
+                                  "07700000" + "07770000" +
+                                  "07798000" + "07988800" +
+                                  "09888880" + "00000000")
+
+for (let i=0;i<8;i++) {
+  display.blit(shape, i, i*8, 0, 8, 8);
+  display.blit(shape, display.clockWiseFlip[i], i*8, 8, 8, 8);
+}

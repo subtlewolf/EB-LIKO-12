@@ -190,14 +190,15 @@ export class Palette {
   }
 }
 
-class IndexedImage extends ImageData {
+export class IndexedImage extends ImageData {
+  clockWiseFlip = [0, 5, 3, 6, 4, 1, 7, 2];
   constructor(width, height, palette, arrayLike) {
     super(width, height);
     this.palette = palette;
     this.rosetta = new Uint32Array(this.data.buffer);
     if (arrayLike && arrayLike.length === width * height) {
         this.indexed = Uint8ClampedArray.from(arrayLike);
-        this.paste(this);
+        this.blit(this);
     } else {
       this.indexed = new Uint8ClampedArray(width * height);
       this.data.fill(palette.transparent)
@@ -254,32 +255,47 @@ class IndexedImage extends ImageData {
     }
     this.setDirty(x, y, width, height);
   }
-  paste(image, x=0, y=0, dirtyX=0, dirtyY=0, dirtyWidth, dirtyHeight) {
-    if (dirtyWidth === undefined) {
-      dirtyWidth = image.width;
-    }
-    if (dirtyHeight === undefined) {
-      dirtyHeight = image.height;
-    }
-    const width = Math.min(this.width - x, image.width - dirtyX, dirtyWidth);
-    const colors = this.palette.colors;
-    const height = Math.min(this.height - y, image.height - dirtyY, dirtyHeight);
-    const source = image.indexed;
-    const target = this.indexed;
+  blit(source, flip=0, left=0, top=0, width, height) {
+    let flipH = flip & 1;
+    let flipV = flip & 2;
+    let flipD = flip & 4;
+    let targetWidth = this.width;
+    let targetHeight = this.height;
     const rosetta = this.rosetta;
+    const indexed = this.indexed;
+    if (width == null) {
+      width = targetWidth - left;
+    }
+    if (height == null) {
+      height = targetHeight - top;
+    }
+    const right = targetWidth - left - width + 1;
+    const bottom = targetHeight - top - height + 1;
     const transparent = this.palette.transparent;
-    for(let i=0;i<height;i++) {
-      const sourceOffset = (dirtyY + i) * image.height;
-      const targetoffset = (y + i) * this.width;
-      for (let j=0;j<width;j++) {
-        const colorId = (source[sourceOffset+dirtyX+j])
+    const colors = this.palette.colors;
+    let index;
+    let offset;
+    for (let y=0;y<height;y++) {
+      const sourceOffset = source.width * y;
+      if (flipD) {
+        index = flipH ? targetWidth - y - right : y + left;
+      } else {
+        offset = (flipV ? targetHeight - y - bottom : y + top) * targetWidth;
+      }
+      for (let x=0;x<width;x++) {
+        if (flipD) {
+          offset = (flipV ? targetHeight - x - bottom : x + top) * targetWidth;
+        } else {
+          index = flipH ? targetWidth - x - right : x + left;
+        }
+        const colorId = source.indexed[sourceOffset + x];
         if (colorId !== transparent) {
-          target[targetoffset+x+j] = colorId;
-          rosetta[targetoffset+x+j] = colors[colorId];
+          indexed[offset + index] = colorId;
+          rosetta[offset + index] = colors[colorId];
         }
       }
     }
-    this.setDirty(x, y, width, height);
+    this.setDirty(left, top, width, height);
   }
   setDirty(x, y, width, height) {
     if (!this.dirty) {
@@ -306,7 +322,7 @@ const crossCursor = "00070000" + "00272000" + "02000200" + "77000770" +
 
 
 class Cursor extends IndexedImage {
-  exposed = ['paste', 'draw', 'clear'];
+  exposed = ['blit', 'draw', 'clear'];
   #offsetX;
   #offsetY;
   #offsetWidth;
@@ -350,7 +366,7 @@ class Cursor extends IndexedImage {
 
 export class Display extends IndexedImage {
   typeName = 'display';
-  expose = ['typeName', 'clear', 'cursor', 'point', 'rectangle'];
+  expose = ['typeName', 'image', 'blit', 'clear', 'cursor', 'point', 'rectangle'];
   constructor(screen, palette) {
     super(screen.width, screen.height, palette);
     screen.resizeHandler();
@@ -359,6 +375,9 @@ export class Display extends IndexedImage {
     this.context = screen.createCanvasContext();
     this.cursor = new Cursor(screen.createCanvasContext(), this.palette);
     exposeAPI(this);
+  }
+  image(width, height, arrayLike) {
+    return new IndexedImage(width, height, this.palette, arrayLike);
   }
   refresh(timestamp) {
     if (this.dirty) {
@@ -397,7 +416,7 @@ export class ScreenMouse {
       this.y = this.screen.height - 1;
     }
     this.dispatch("mousemove", {x: this.x, y: this.y});
-  }  
+  }
   start() {
     this.screen.screenElement.addEventListener(
       'mousemove', this.mouseMoveHandler.bind(this)
